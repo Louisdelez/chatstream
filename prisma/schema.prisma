@@ -1,0 +1,206 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Auth (better-auth compatible) ──
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  name          String?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  settings      UserSettings?
+  channels      UserChannel[]
+  mutedUsers    MutedUser[]
+  pins          Pin[]
+  formats       Format[]
+  shares        Share[]        @relation("ShareOwner")
+  shareAccesses ShareAccess[]
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  idToken               String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// ── App Data ──
+
+model UserSettings {
+  id             String  @id @default(cuid())
+  userId         String  @unique
+  theme          String  @default("light")
+  pageLayout     String  @default("page")
+  fontSize       Int     @default(15)
+  fontFamily     String  @default("Inter")
+  compact        Boolean @default(false)
+  showTimestamps Boolean @default(true)
+  showPlatform   Boolean @default(true)
+  showBadges     Boolean @default(true)
+  showUsername   Boolean @default(true)
+  showSubs       Boolean @default(true)
+  showGiftSubs   Boolean @default(true)
+  showPrime      Boolean @default(true)
+  showBits       Boolean @default(true)
+  showRaids      Boolean @default(true)
+  maxMessages    Int     @default(5000)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserChannel {
+  id      String   @id @default(cuid())
+  userId  String
+  name    String
+  addedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+model Message {
+  id          String   @id
+  channel     String
+  timestamp   DateTime
+  username    String
+  displayName String
+  color       String?
+  message     String
+  roles       String[]
+  badges      Json     @default("{}")
+  emotes      Json?
+  isAction    Boolean  @default(false)
+  eventType   String?
+  eventData   Json?
+  dayKey      String
+
+  formats Format[]
+  pins    Pin[]
+
+  @@index([channel, dayKey])
+  @@index([channel, timestamp])
+}
+
+model Format {
+  id        String  @id @default(cuid())
+  userId    String
+  messageId String
+  start     Int
+  end       Int
+  style     String
+  color     String?
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, messageId, start, end, style])
+  @@index([userId, messageId])
+}
+
+model Pin {
+  id          String   @id @default(cuid())
+  userId      String
+  messageId   String
+  channel     String
+  displayName String
+  color       String?
+  text        String
+  fullMessage String
+  timestamp   DateTime
+  pinnedAt    DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([userId, channel])
+}
+
+model MutedUser {
+  id       String @id @default(cuid())
+  userId   String
+  username String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, username])
+  @@index([userId])
+}
+
+model Share {
+  id        String    @id @default(cuid())
+  ownerId   String
+  channel   String
+  slug      String    @unique
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+  active    Boolean   @default(true)
+
+  owner    User          @relation("ShareOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  accesses ShareAccess[]
+
+  @@index([ownerId])
+}
+
+model ShareAccess {
+  id         String  @id @default(cuid())
+  shareId    String
+  userId     String?
+  permission String  @default("view")
+
+  share Share @relation(fields: [shareId], references: [id], onDelete: Cascade)
+  user  User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([shareId])
+  @@index([userId])
+}
