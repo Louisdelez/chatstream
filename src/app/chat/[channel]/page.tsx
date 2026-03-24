@@ -3,8 +3,8 @@
 import { useMemo, useCallback, useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { MessageSquare } from 'lucide-react';
+import { useRef } from 'react';
 import { useTwitchChat } from '@/hooks/useTwitchChat';
-import { useAutoScroll } from '@/hooks/useAutoScroll';
 import { useChatStore } from '@/stores/chatStore';
 import { useFilterStore } from '@/stores/filterStore';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -13,7 +13,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useChannelStore } from '@/stores/channelStore';
 import { usePinStore } from '@/stores/pinStore';
 import { ChatDocument } from '@/components/chat/ChatDocument';
-import { ChatMessageRow } from '@/components/chat/ChatMessage';
+import { VirtualChatList } from '@/components/chat/VirtualChatList';
 import { ChatToolbar } from '@/components/chat/ChatToolbar';
 import { BottomBar } from '@/components/chat/BottomBar';
 import { PinnedPanel } from '@/components/chat/PinnedPanel';
@@ -21,6 +21,8 @@ import { ChannelSidebar } from '@/components/chat/ChannelSidebar';
 import { TwitchSetup } from '@/components/chat/TwitchSetup';
 import { ArchivePanel } from '@/components/chat/ArchivePanel';
 import { MigratePrompt } from '@/components/MigratePrompt';
+import { WordCounterChart } from '@/components/chat/WordCounterChart';
+import { TrackedWord, TimePoint } from '@/components/chat/WordCounter';
 import { useStreamStatus } from '@/hooks/useStreamStatus';
 
 export default function ChatPage() {
@@ -30,6 +32,10 @@ export default function ChatPage() {
   const { sendMessage } = useTwitchChat(channel);
   const streamInfo = useStreamStatus(channel);
   const [showArchives, setShowArchives] = useState(false);
+  const [trackedWords, setTrackedWords] = useState<TrackedWord[]>([]);
+  const [timeline, setTimeline] = useState<TimePoint[]>([]);
+  const [showChart, setShowChart] = useState(false);
+  const [chartType, setChartType] = useState<'bar' | 'pie' | 'line' | 'area'>('bar');
   const loadSession = useAuthStore((s) => s.loadSession);
 
   useEffect(() => {
@@ -96,9 +102,16 @@ export default function ChatPage() {
     return result;
   }, [messages, roles, keyword, showSubs, showGiftSubs, showPrime, showBits, showRaids, mutedUsers, muteHost, channel]);
 
-  const { containerRef, isAtBottom, scrollToBottom } = useAutoScroll([
-    filteredMessages.length,
-  ]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+
+  const scrollToBottom = useCallback(() => {
+    const el = containerRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+      setIsAtBottom(true);
+    }
+  }, []);
 
   const handleScrollToMessage = useCallback((messageId: string) => {
     const el = document.getElementById(`msg-${messageId}`);
@@ -119,6 +132,11 @@ export default function ChatPage() {
           allMessages={messages}
           streamInfo={streamInfo}
           onOpenArchives={() => setShowArchives(true)}
+          onWordsChange={setTrackedWords}
+          onTimelineChange={setTimeline}
+          showChart={showChart}
+          onShowChartChange={setShowChart}
+          onChartTypeChange={setChartType}
         />
 
         <ChatDocument
@@ -128,6 +146,10 @@ export default function ChatPage() {
           messageCount={filteredMessages.length}
           channel={channel}
           streamTitle={streamInfo.title}
+          showChart={showChart}
+          trackedWords={trackedWords}
+          timeline={timeline}
+          chartType={chartType}
         >
           {filteredMessages.length === 0 && status === 'connected' && (
             <div className="flex flex-col items-center justify-center py-20" style={{ color: 'var(--text-faint)' }}>
@@ -149,9 +171,13 @@ export default function ChatPage() {
             </div>
           )}
 
-          {filteredMessages.map((msg) => (
-            <ChatMessageRow key={msg.id} message={msg} />
-          ))}
+          {filteredMessages.length > 0 && (
+            <VirtualChatList
+              messages={filteredMessages}
+              containerRef={containerRef}
+              onAtBottomChange={setIsAtBottom}
+            />
+          )}
         </ChatDocument>
 
         <BottomBar

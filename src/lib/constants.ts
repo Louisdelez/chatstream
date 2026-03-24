@@ -33,7 +33,7 @@ export const DEFAULT_SETTINGS = {
   showBits: true,
   showRaids: true,
   fontFamily: 'Inter',
-  maxMessages: 5000,
+  maxMessages: 20000,
 };
 
 export const TWITCH_COLORS = [

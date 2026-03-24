@@ -3,6 +3,8 @@
 import { ReactNode } from 'react';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { ChevronDown } from 'lucide-react';
+import { WordCounterChart } from './WordCounterChart';
+import type { TrackedWord, TimePoint, ChartType } from './WordCounter';
 
 interface Props {
   children: ReactNode;
@@ -12,6 +14,10 @@ interface Props {
   messageCount: number;
   channel: string;
   streamTitle?: string;
+  showChart?: boolean;
+  trackedWords?: TrackedWord[];
+  timeline?: TimePoint[];
+  chartType?: ChartType;
 }
 
 export function ChatDocument({
@@ -22,6 +28,10 @@ export function ChatDocument({
   messageCount,
   channel,
   streamTitle,
+  showChart,
+  trackedWords,
+  timeline,
+  chartType,
 }: Props) {
   const fontSize = useSettingsStore((s) => s.fontSize);
   const fontFamily = useSettingsStore((s) => s.fontFamily);
@@ -57,6 +67,16 @@ export function ChatDocument({
             {messageCount} message{messageCount !== 1 ? 's' : ''}
           </p>
         </div>
+
+        {/* Chart (between header and messages) */}
+        {showChart && trackedWords && trackedWords.length > 0 && (
+          <div
+            className="shrink-0 px-3 sm:px-6 lg:px-10 py-3"
+            style={{ background: 'var(--bg-document)', borderBottom: '1px solid var(--border)' }}
+          >
+            <WordCounterChart words={trackedWords} timeline={timeline || []} chartType={chartType || 'bar'} />
+          </div>
+        )}
 
         {/* Document body (scrollable, takes remaining space) */}
         <div

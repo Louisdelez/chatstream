@@ -2,52 +2,110 @@ import { create } from 'zustand';
 import { ChatMessage, ConnectionStatus } from '@/types';
 import { DEFAULT_SETTINGS } from '@/lib/constants';
 
+// External mutable structures — never copied, O(1) operations
+const messageIdSet = new Set<string>();
+let messageBuffer: ChatMessage[] = [];
+let pendingMessages: ChatMessage[] = [];
+let flushScheduled = false;
+
 interface ChatStore {
   channel: string | null;
   status: ConnectionStatus;
   messages: ChatMessage[];
-  messageIds: Set<string>;
+  messageCount: number;
   sessionId: string | null;
 
   setChannel: (channel: string | null) => void;
   setStatus: (status: ConnectionStatus) => void;
   addMessage: (msg: ChatMessage) => void;
+  addMessages: (msgs: ChatMessage[]) => void;
   loadMessages: (msgs: ChatMessage[]) => void;
   clearMessages: () => void;
   setSessionId: (id: string | null) => void;
+}
+
+function flushPending() {
+  if (pendingMessages.length === 0) return;
+
+  const toAdd = pendingMessages;
+  pendingMessages = [];
+  flushScheduled = false;
+
+  useChatStore.setState((state) => {
+    const max = DEFAULT_SETTINGS.maxMessages;
+
+    for (const msg of toAdd) {
+      if (messageIdSet.has(msg.id)) continue;
+      messageIdSet.add(msg.id);
+      messageBuffer.push(msg);
+    }
+
+    // Trim if over max
+    if (messageBuffer.length > max) {
+      const excess = messageBuffer.length - max;
+      for (let i = 0; i < excess; i++) {
+        messageIdSet.delete(messageBuffer[i].id);
+      }
+      messageBuffer = messageBuffer.slice(excess);
+    }
+
+    // Return new array reference so React re-renders
+    return { messages: messageBuffer.slice(), messageCount: messageBuffer.length };
+  });
 }
 
 export const useChatStore = create<ChatStore>((set) => ({
   channel: null,
   status: 'disconnected',
   messages: [],
-  messageIds: new Set<string>(),
+  messageCount: 0,
   sessionId: null,
 
   setChannel: (channel) => set({ channel }),
   setStatus: (status) => set({ status }),
-  addMessage: (msg) =>
-    set((state) => {
-      // Skip duplicate messages (O(1) lookup)
-      if (state.messageIds.has(msg.id)) return state;
 
-      const newIds = new Set(state.messageIds);
-      newIds.add(msg.id);
+  // Batched: collects messages and flushes every 100ms via requestAnimationFrame
+  addMessage: (msg) => {
+    if (messageIdSet.has(msg.id)) return;
+    pendingMessages.push(msg);
 
-      let messages: ChatMessage[];
-      if (state.messages.length >= DEFAULT_SETTINGS.maxMessages) {
-        const removed = state.messages[0];
-        newIds.delete(removed.id);
-        messages = [...state.messages.slice(1), msg];
+    if (!flushScheduled) {
+      flushScheduled = true;
+      if (typeof requestAnimationFrame !== 'undefined') {
+        requestAnimationFrame(flushPending);
       } else {
-        messages = [...state.messages, msg];
+        setTimeout(flushPending, 50);
       }
-      return { messages, messageIds: newIds };
-    }),
-  loadMessages: (msgs) => {
-    const sliced = msgs.slice(-DEFAULT_SETTINGS.maxMessages);
-    return set({ messages: sliced, messageIds: new Set(sliced.map((m) => m.id)) });
+    }
   },
-  clearMessages: () => set({ messages: [], messageIds: new Set<string>() }),
+
+  // Immediate batch add (for loading recent messages)
+  addMessages: (msgs) => {
+    pendingMessages.push(...msgs);
+    flushPending();
+  },
+
+  loadMessages: (msgs) => {
+    const max = DEFAULT_SETTINGS.maxMessages;
+    const sliced = msgs.slice(-max);
+    messageIdSet.clear();
+    messageBuffer = [];
+    for (const m of sliced) {
+      if (!messageIdSet.has(m.id)) {
+        messageIdSet.add(m.id);
+        messageBuffer.push(m);
+      }
+    }
+    set({ messages: messageBuffer.slice(), messageCount: messageBuffer.length });
+  },
+
+  clearMessages: () => {
+    messageIdSet.clear();
+    messageBuffer = [];
+    pendingMessages = [];
+    flushScheduled = false;
+    set({ messages: [], messageCount: 0 });
+  },
+
   setSessionId: (id) => set({ sessionId: id }),
 }));

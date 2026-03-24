@@ -23,6 +23,7 @@ import {
   Calendar,
   Share2,
   LogIn,
+  Hash,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useChannelStore } from '@/stores/channelStore';
@@ -36,6 +37,7 @@ import { ConnectionStatusIndicator } from './ConnectionStatus';
 import { ExportMenu } from '@/components/export/ExportMenu';
 import { UserMenu } from '@/components/auth/UserMenu';
 import { ShareModal } from '@/components/chat/ShareModal';
+import { WordCounter, TrackedWord, TimePoint } from '@/components/chat/WordCounter';
 import { UserRole, ChatMessage } from '@/types';
 import type { StreamStatus } from '@/hooks/useStreamStatus';
 import { ROLE_LABELS } from '@/lib/constants';
@@ -64,6 +66,11 @@ interface Props {
     viewerCount: number;
     avatar: string;
   };
+  onWordsChange: (words: TrackedWord[]) => void;
+  onTimelineChange: (timeline: TimePoint[]) => void;
+  showChart: boolean;
+  onShowChartChange: (show: boolean) => void;
+  onChartTypeChange: (type: 'bar' | 'pie' | 'line' | 'area') => void;
 }
 
 function getSelectionInfo(): {
@@ -102,7 +109,7 @@ function getSelectionInfo(): {
   return null;
 }
 
-export function ChatToolbar({ filteredMessages, channel, allMessages, streamInfo, onOpenArchives }: Props) {
+export function ChatToolbar({ filteredMessages, channel, allMessages, streamInfo, onOpenArchives, onWordsChange, onTimelineChange, showChart, onShowChartChange, onChartTypeChange }: Props) {
   const router = useRouter();
   const status = useChatStore((s) => s.status);
   const toggleSidebar = useChannelStore((s) => s.toggleSidebar);
@@ -158,6 +165,7 @@ export function ChatToolbar({ filteredMessages, channel, allMessages, streamInfo
   const [showFontMenu, setShowFontMenu] = useState(false);
   const [showEventMenu, setShowEventMenu] = useState(false);
   const [showMuteMenu, setShowMuteMenu] = useState(false);
+  const [showWordCounter, setShowWordCounter] = useState(false);
   const mutedUsers = useMuteStore((s) => s.mutedUsers);
   const muteHost = useMuteStore((s) => s.muteHost);
   const toggleMuteUser = useMuteStore((s) => s.toggleMuteUser);
@@ -598,6 +606,29 @@ export function ChatToolbar({ filteredMessages, channel, allMessages, streamInfo
             onChange={(e) => setLocalKeyword(e.target.value)}
             placeholder="Rechercher..."
             className="tb-input h-7 pl-8 pr-3 text-xs rounded-lg border focus:outline-none focus:ring-1 focus:ring-purple-400 w-24 sm:w-40"
+          />
+        </div>
+
+        <div className="hidden sm:block w-px h-5 tb-separator" />
+
+        {/* Word counter */}
+        <div className="relative">
+          <button
+            onClick={() => setShowWordCounter(!showWordCounter)}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border transition ${showWordCounter ? 'tb-active' : 'tb-btn'}`}
+            title="Compteur de mots"
+          >
+            <Hash className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Compteur</span>
+          </button>
+          <WordCounter
+            isOpen={showWordCounter}
+            onClose={() => setShowWordCounter(false)}
+            onWordsChange={onWordsChange}
+            onTimelineChange={onTimelineChange}
+            showChart={showChart}
+            onShowChartChange={onShowChartChange}
+            onChartTypeChange={onChartTypeChange}
           />
         </div>
 
